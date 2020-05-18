@@ -103,7 +103,7 @@
          :name arg-text))))
 )
 
-(defun python-docstring/get-function-args (header)
+(defun python-docstring/--get-function-args (header)
   "Given a function HEADER (from --get-function-header) return all args, types, and default values."
 
   ;; Match inbetween the parenthesis to get the args
@@ -112,9 +112,12 @@
 
   ;; Define the arguments as the arguments from the header split by commas with optional
   ;; spaces
-  (let ((arguments (split-string (substring (match-string 0 header) 1 -1) ",\s?")))
-    ;; Apply the argument-builder to each argument string
-    (mapcar 'python-docstring/--argument-builder arguments))
+  (let* ((arguments-text (substring (match-string 0 header) 1 -1))
+         (arguments (split-string arguments-text ",\s?")))
+    ;; Only proceed if arguments is not an empty string
+    (if (not (= (length arguments-text) 0))
+        ;; Apply the argument-builder to each argument string
+        (mapcar 'python-docstring/--argument-builder arguments)))
 )
 
 (defun python-docstring/--print-arg (arg indentation)
@@ -160,52 +163,75 @@ This will print the comment in the Google docstring style:
       (insert ")"))
 
     ;; Insert the : and go to the next line
-    (insert ": \n"))
+    (insert ":\n"))
   )
 
 (defun python-docstring/generate-docstring ()
   "Generate documentation for function under cursor."
   (interactive)
+  ;; Get information about the function
   (let* ((header (python-docstring/get-function-header))
-         (args (python-docstring/get-function-args header))
+         (args (python-docstring/--get-function-args header))
          (return-type (python-docstring/--get-function-return-type header))
          (indentation (make-string (python-docstring/get-function-indentation) ?\s)))
-    (search-forward "\)")
+    ;; Go to the last char of the function
+    (re-search-forward "\).*:")
+
+    ;; Go down one line
     (forward-line)
-    (beginning-of-line)
-    (insert "\n")
-    (forward-line -1)
-    (insert indentation)
-    (insert indentation)
-    (insert "\"\"\"\n")
-    (insert indentation)
-    (insert indentation)
-    (insert "Args:\n")
 
+    ;; Insert the start of the docstring and a FIXME for the comment
+    (insert indentation)
+    (insert indentation)
+    (insert "\"\"\" FIXME: Insert function comment\n")
 
-    (mapc (lambda (arg)
-            (python-docstring/--print-arg arg indentation)
-              ) args)
+    ;; If there are arguments then print them
+    (unless (eq args nil)
+      ;; Insert the start of the argument list
+      (insert indentation)
+      (insert indentation)
+      (insert "Args:\n")
 
+      ;; Map the print function to each argument with the specified indentation
+      (mapc (lambda (arg)
+              (python-docstring/--print-arg arg indentation)) args))
+
+    ;; Print the return type if one exists
     (when return-type
+      ;; Print the returns header
       (insert "\n")
       (insert indentation)
       (insert indentation)
       (insert "Returns:\n")
+
+      ;; Indent the return type
       (insert indentation)
       (insert indentation)
       (insert indentation)
+
+      ;; Print the return type
       (insert return-type)
-      (insert ": ")
-      (insert "\n")
+      (insert ":\n")
     )
-    (kill-whole-line)
+
+    ;; Print the ending comment
     (insert indentation)
     (insert indentation)
     (insert "\"\"\"\n")
+
+    ;; Search back to the beginning and put the mark over the F in FIXME
+    (forward-line -1)
+    (search-backward "\"\"\"")
+    (forward-char 4)
   )
   )
 
+(define-minor-mode python-docstring-minor-mode
+  "Minor mode for inserting python docstring in google style."
+  :lighter " docstring"
+  :keymap (let ((map (make-sparse-keymap)))
+            (define-key map (kbd "<f9>") 'python-docstring/generate-docstring)
+            map))
 
-(provide 'docstring)
-;;; docstring.el ends here
+(provide 'python-docstring)
+;;; python-docstring.el ends here
